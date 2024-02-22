@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <MPU9250.h>
 
+#include "httpServer.h"
+
 #define MPU_ADDRESS 0x68
 #define MPU_CALIBRATION_ITERATIONS 1000
 
@@ -74,12 +76,14 @@ void setup() {
   mpu.setup(MPU_ADDRESS);
   calibrateImu();
 
-  motorSpeed(15);
+  motorSpeed(0);
   servoAngle(90);
 
   //Debugging
   Serial.begin(9600);
   gyro_last_time = millis();
+
+  setupServer();
 }
 
 void loop() {
@@ -93,4 +97,5 @@ void loop() {
   if(updateGyro()) {
     servoAngle(computeServoSpeed() + 90);
   }
+  loopServer();
 }
