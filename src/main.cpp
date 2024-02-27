@@ -1,28 +1,38 @@
 #include <Arduino.h>
 #include <MPU9250.h>
-
-#include "httpServer.h"
+#include <RPLidar.h>
 
 #define MPU_ADDRESS 0x68
 #define MPU_CALIBRATION_ITERATIONS 1000
+#define RPLIDAR_MOTOR 5
 
 #define DIR_KP 1.2
 #define DIR_KI 0
 #define DIR_KD 1.2
 
-long gyro_dt;
+// You need to create an driver instance 
+HardwareSerial hs(1);
+HardwareSerial lidar_serial(2);
+RPLidar lidar;
+MPU9250 mpu;
+TaskHandle_t lidar_task;
 
 // PID variables
 float error, last_error, cum_error, rate_error;
 
-MPU9250 mpu;
-HardwareSerial hs(1);
-
+// navigation vars
 float current_direction = 0.0f;
+float target_angle = 0.0f;
+long gyro_dt;
 unsigned long gyro_last_time = 0;
 float gyro_offset;
-float target_angle = 0.0f;
 
+// lidar vars
+float left_distance = 0.0f;
+float right_distance = 0.0f;
+float front_distace = 0.0f;
+
+// slave stats
 int total_encoders = 0;
 
 void motorSpeed(int speed) {
@@ -68,6 +78,42 @@ float computeServoSpeed() {
   return output;
 }
 
+// use absloute angle for this
+void liderTask(void * pvParameters) {
+  for (;;) {
+    vTaskDelay(1);
+    
+
+    if (IS_OK(lidar.waitPoint())) {
+      float distance = lidar.getCurrentPoint().distance; //distance value in mm unit
+      float angle    = lidar.getCurrentPoint().angle; //anglue value in degree
+
+      if (distance < 10.0 || distance > 3000.0) {
+        continue;
+      }
+
+      float r_angle = angle + (target_angle - current_direction);
+      // Serial.println(r_angle);
+
+      // front
+      if (r_angle < 15 || r_angle > 345) {
+        front_distace = distance;
+      }
+
+      // right
+      else if (r_angle < 105 || r_angle > 75) {
+        right_distance = distance;
+        Serial.println(r_angle);
+      }
+
+      // left
+      else if (r_angle < 285 || r_angle > 255) {
+        left_distance = distance;
+      }
+    }
+  }
+}
+
 void setup() {
   // Motor
   hs.begin(1000000, SERIAL_8N1, 4, 2);
@@ -83,10 +129,41 @@ void setup() {
   Serial.begin(9600);
   gyro_last_time = millis();
 
-  setupServer();
+  // begin the lidar
+  lidar.begin(lidar_serial);
+  rplidar_response_device_info_t info;
+  while (!IS_OK(lidar.getDeviceInfo(info, 100))) delay(500);
+  rplidar_response_device_health_t health;
+  lidar.getHealth(health);
+  Serial.println("info: " + String(health.status) +", " + String(health.error_code));
+  // detected...
+  lidar.startScan();
+
+  xTaskCreatePinnedToCore(
+  liderTask,
+  "liderTask",
+  100000,
+  NULL,
+  10,
+  &lidar_task,
+  0);
+
+  analogWrite(RPLIDAR_MOTOR, 255);
 }
 
 void loop() {
+  updateGyro();
+  return;
+  Serial.print("left: ");
+  Serial.print(left_distance);
+  Serial.print(" right: ");
+  Serial.print(right_distance);
+  Serial.print(" front: ");
+  Serial.println(front_distace);
+
+
+  
+  return;
   if(hs.available() > 0) {
     total_encoders += hs.readStringUntil('\n').toInt();
     if(total_encoders > 200) {
@@ -97,5 +174,4 @@ void loop() {
   if(updateGyro()) {
     servoAngle(computeServoSpeed() + 90);
   }
-  loopServer();
 }
