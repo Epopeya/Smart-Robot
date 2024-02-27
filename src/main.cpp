@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <MPU9250.h>
+#include <debug.h>
+
+#include "httpServer.h"
 #include <RPLidar.h>
 
 #define MPU_ADDRESS 0x68
@@ -124,6 +127,7 @@ void setup() {
 
   motorSpeed(0);
   servoAngle(90);
+  debug_init();
 
   //Debugging
   Serial.begin(9600);
