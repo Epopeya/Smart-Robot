@@ -9,7 +9,7 @@ typedef enum {
 	Servo
 } DebugHeader;
 
-HardwareSerial hs_debug(2);
+HardwareSerial hs_debug(3);
 
 void debug_init() {
 	hs_debug.begin(112500, SERIAL_8N1, 4, 2);

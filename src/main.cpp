@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <MPU9250.h>
-#include <debug.h>
 
-#include "httpServer.h"
 #include <RPLidar.h>
 
 #define MPU_ADDRESS 0x68
@@ -12,6 +10,9 @@
 #define DIR_KP 1.2
 #define DIR_KI 0
 #define DIR_KD 1.2
+
+#define LIDAR_SMOOTHING 0.4f
+#define LIDAR_INV_SMOOTHING (1 - LIDAR_SMOOTHING)
 
 // You need to create an driver instance 
 HardwareSerial hs(1);
@@ -26,6 +27,7 @@ float error, last_error, cum_error, rate_error;
 // navigation vars
 float current_direction = 0.0f;
 float target_angle = 0.0f;
+float last_turn_millis = 0.0;
 long gyro_dt;
 unsigned long gyro_last_time = 0;
 float gyro_offset;
@@ -100,18 +102,17 @@ void liderTask(void * pvParameters) {
 
       // front
       if (r_angle < 15 || r_angle > 345) {
-        front_distace = distance;
+        front_distace =LIDAR_SMOOTHING * front_distace + LIDAR_INV_SMOOTHING * distance;
       }
 
       // right
-      else if (r_angle < 105 || r_angle > 75) {
-        right_distance = distance;
-        Serial.println(r_angle);
+      else if (r_angle < 105 && r_angle > 75) {
+        right_distance = LIDAR_SMOOTHING * right_distance + LIDAR_INV_SMOOTHING * distance;
       }
 
       // left
-      else if (r_angle < 285 || r_angle > 255) {
-        left_distance = distance;
+      else if (r_angle < 285 && r_angle > 255) {
+        left_distance = LIDAR_SMOOTHING * left_distance + LIDAR_INV_SMOOTHING * distance;
       }
     }
   }
@@ -125,9 +126,8 @@ void setup() {
   mpu.setup(MPU_ADDRESS);
   calibrateImu();
 
-  motorSpeed(0);
+  motorSpeed(35);
   servoAngle(90);
-  debug_init();
 
   //Debugging
   Serial.begin(9600);
@@ -156,25 +156,28 @@ void setup() {
 }
 
 void loop() {
-  updateGyro();
-  return;
-  Serial.print("left: ");
-  Serial.print(left_distance);
-  Serial.print(" right: ");
-  Serial.print(right_distance);
-  Serial.print(" front: ");
-  Serial.println(front_distace);
+  // updateGyro();
+  // Serial.print("left: ");
+  // Serial.print(left_distance);
+  // Serial.print(" right: ");
+  // Serial.print(right_distance);
+  // Serial.print(" front: ");
+  // Serial.println(front_distace);
 
 
-  
-  return;
-  if(hs.available() > 0) {
-    total_encoders += hs.readStringUntil('\n').toInt();
-    if(total_encoders > 200) {
-      target_angle += 90;
-      total_encoders = 0;
-    }
+  // if(hs.available() > 0) {
+  //   total_encoders += hs.readStringUntil('\n').toInt();
+  //   if(total_encoders > 200) {
+  //     target_angle += 90;
+  //     total_encoders = 0;
+  //   }
+  // }
+
+  if (millis() - last_turn_millis > 1000 && left_distance > 1000 && front_distace < 1200) {
+    last_turn_millis = millis();
+    target_angle += 90;
   }
+
   if(updateGyro()) {
     servoAngle(computeServoSpeed() + 90);
   }
