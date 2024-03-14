@@ -6,10 +6,12 @@
 #define MPU_ADDRESS 0x68
 #define MPU_CALIBRATION_ITERATIONS 1000
 #define RPLIDAR_MOTOR 5
+#define MILIMETERS_PER_ENCODER 6
+#define SERVO_MIDPOINT 93
 
-#define DIR_KP 1.2
+#define DIR_KP 0.02
 #define DIR_KI 0
-#define DIR_KD 1.2
+#define DIR_KD 0.02
 
 #define LIDAR_SMOOTHING 0.4f
 #define LIDAR_INV_SMOOTHING (1 - LIDAR_SMOOTHING)
@@ -31,6 +33,8 @@ float last_turn_millis = 0.0;
 long gyro_dt;
 unsigned long gyro_last_time = 0;
 float gyro_offset;
+float posX = 0;
+float posY = 0; 
 
 // lidar vars
 float left_distance = 0.0f;
@@ -64,7 +68,7 @@ bool updateGyro() {
     long current_millis = millis();
     gyro_dt = current_millis - gyro_last_time;
     gyro_last_time = current_millis;
-    float gyro_value = mpu.getGyroZ() - gyro_offset;
+    float gyro_value = (mpu.getGyroZ() - gyro_offset) *2*PI/360;
     current_direction += gyro_value * gyro_dt / 1000;
     return true;
   }
@@ -126,8 +130,8 @@ void setup() {
   mpu.setup(MPU_ADDRESS);
   calibrateImu();
 
-  motorSpeed(35);
-  servoAngle(90);
+  motorSpeed(10);
+  servoAngle(SERVO_MIDPOINT);
 
   //Debugging
   Serial.begin(9600);
@@ -136,7 +140,7 @@ void setup() {
   // begin the lidar
   lidar.begin(lidar_serial);
   rplidar_response_device_info_t info;
-  while (!IS_OK(lidar.getDeviceInfo(info, 100))) delay(500);
+  //while (!IS_OK(lidar.getDeviceInfo(info, 100))) delay(500);
   rplidar_response_device_health_t health;
   lidar.getHealth(health);
   Serial.println("info: " + String(health.status) +", " + String(health.error_code));
@@ -155,6 +159,12 @@ void setup() {
   analogWrite(RPLIDAR_MOTOR, 255);
 }
 
+int waypoints[8] = {1000, 1000, 
+                    -1000, 1000, 
+                    -1000, -1000, 
+                    1000, -1000};
+int waypoint_index = 0;
+
 void loop() {
   // updateGyro();
   // Serial.print("left: ");
@@ -165,20 +175,53 @@ void loop() {
   // Serial.println(front_distace);
 
 
-  // if(hs.available() > 0) {
-  //   total_encoders += hs.readStringUntil('\n').toInt();
-  //   if(total_encoders > 200) {
-  //     target_angle += 90;
-  //     total_encoders = 0;
-  //   }
-  // }
+  if(hs.available() > 0) {
+    int encoders = hs.readStringUntil('\n').toInt() * MILIMETERS_PER_ENCODER;
 
-  if (millis() - last_turn_millis > 1000 && left_distance > 1000 && front_distace < 1200) {
-    last_turn_millis = millis();
-    target_angle += 90;
+    // current direction vector
+    float dirX = cos(current_direction);
+    float dirY = sin(current_direction);
+
+    // vector pointing to target
+    float targetX = waypoints[waypoint_index] - posX;
+    float targetY = waypoints[waypoint_index + 1] - posY;
+
+    // angle between position vector and target vector
+    // float nominator = targetX * dirY - targetY * dirX;
+    // float denominator = sqrt(targetX*targetX + targetY*targetY) * sqrt(dirX*dirX + dirY*dirY);
+    // float vectorAngle = asin(nominator / denominator);
+
+    // add angle to current dir
+    // target_angle = current_direction - vectorAngle;
+
+    target_angle = atan2(dirY, dirX) - atan2(targetY, targetX) - current_direction;
+
+    posX += encoders * dirX;
+    posY += encoders * dirY;
   }
 
+  float offsetX = waypoints[waypoint_index] - posX;
+  float offsetY = waypoints[waypoint_index + 1] - posY;
+  if((offsetX*offsetX + offsetY*offsetY) < 200*200) {
+    waypoint_index = (waypoint_index + 2) % 8;
+  }
+
+
+  Serial.print("posX: ");
+  Serial.print(posX);
+  Serial.print(" posY: ");
+  Serial.print(posY);
+  Serial.print(" current dir: ");
+  Serial.print(current_direction);
+  Serial.print(" target angle: ");
+  Serial.println(target_angle);
+
+  // if (millis() - last_turn_millis > 1000 && left_distance > 1000 && front_distace < 1200) {
+  //   last_turn_millis = millis();
+  //   target_angle += 90;
+  // }
+
   if(updateGyro()) {
-    servoAngle(computeServoSpeed() + 90);
+    servoAngle(computeServoSpeed() * 360.0f/2*PI + SERVO_MIDPOINT); // convert to degrees now
   }
 }
