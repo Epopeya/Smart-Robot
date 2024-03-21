@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <MPU9250.h>
+#include "debug.h"
 
 #include <RPLidar.h>
 
@@ -9,14 +10,15 @@
 #define MILIMETERS_PER_ENCODER 6
 #define SERVO_MIDPOINT 93
 
-#define DIR_KP 0.02
+#define DIR_KP 0.1
 #define DIR_KI 0
 #define DIR_KD 0.02
 
 #define LIDAR_SMOOTHING 0.4f
 #define LIDAR_INV_SMOOTHING (1 - LIDAR_SMOOTHING)
 
-// You need to create an driver instance 
+// You need to create an driver instance
+HardwareSerial hs_debug(0);
 HardwareSerial hs(1);
 HardwareSerial lidar_serial(2);
 RPLidar lidar;
@@ -121,7 +123,6 @@ void liderTask(void * pvParameters) {
     }
   }
 }
-
 void setup() {
   // Motor
   hs.begin(1000000, SERIAL_8N1, 4, 2);
@@ -134,7 +135,8 @@ void setup() {
   servoAngle(SERVO_MIDPOINT);
 
   //Debugging
-  Serial.begin(9600);
+  //Serial.begin(9600);
+  debug_init();
   gyro_last_time = millis();
 
   // begin the lidar
@@ -143,7 +145,7 @@ void setup() {
   //while (!IS_OK(lidar.getDeviceInfo(info, 100))) delay(500);
   rplidar_response_device_health_t health;
   lidar.getHealth(health);
-  Serial.println("info: " + String(health.status) +", " + String(health.error_code));
+  //Serial.println("info: " + String(health.status) +", " + String(health.error_code));
   // detected...
   lidar.startScan();
 
@@ -157,24 +159,17 @@ void setup() {
   0);
 
   analogWrite(RPLIDAR_MOTOR, 255);
+
+      
 }
 
-int waypoints[8] = {1000, 1000, 
-                    -1000, 1000, 
-                    -1000, -1000, 
-                    1000, -1000};
+int waypoints[8] = {2000, 2000, 
+                    -2000, 2000, 
+                    -2000, -2000, 
+                    2000, -2000};
 int waypoint_index = 0;
 
 void loop() {
-  // updateGyro();
-  // Serial.print("left: ");
-  // Serial.print(left_distance);
-  // Serial.print(" right: ");
-  // Serial.print(right_distance);
-  // Serial.print(" front: ");
-  // Serial.println(front_distace);
-
-
   if(hs.available() > 0) {
     int encoders = hs.readStringUntil('\n').toInt() * MILIMETERS_PER_ENCODER;
 
@@ -182,44 +177,35 @@ void loop() {
     float dirX = cos(current_direction);
     float dirY = sin(current_direction);
 
+    posX += encoders * dirX;
+    posY += encoders * dirY;
+
     // vector pointing to target
     float targetX = waypoints[waypoint_index] - posX;
     float targetY = waypoints[waypoint_index + 1] - posY;
 
-    // angle between position vector and target vector
-    // float nominator = targetX * dirY - targetY * dirX;
-    // float denominator = sqrt(targetX*targetX + targetY*targetY) * sqrt(dirX*dirX + dirY*dirY);
-    // float vectorAngle = asin(nominator / denominator);
+    // shortest angle to target
+    float angle_diff = atan2(targetY, targetX) - atan2(dirY, dirX);
+    if (angle_diff > PI) {
+      angle_diff = angle_diff - 2*PI;
+    } else if (angle_diff < -PI) {
+      angle_diff = angle_diff + 2*PI;
+    } 
 
-    // add angle to current dir
-    // target_angle = current_direction - vectorAngle;
+    target_angle = angle_diff + current_direction;
 
-    target_angle = atan2(dirY, dirX) - atan2(targetY, targetX) - current_direction;
-
-    posX += encoders * dirX;
-    posY += encoders * dirY;
-  }
-
-  float offsetX = waypoints[waypoint_index] - posX;
-  float offsetY = waypoints[waypoint_index + 1] - posY;
-  if((offsetX*offsetX + offsetY*offsetY) < 200*200) {
-    waypoint_index = (waypoint_index + 2) % 8;
-  }
-
-
-  Serial.print("posX: ");
-  Serial.print(posX);
-  Serial.print(" posY: ");
-  Serial.print(posY);
-  Serial.print(" current dir: ");
-  Serial.print(current_direction);
-  Serial.print(" target angle: ");
-  Serial.println(target_angle);
-
-  // if (millis() - last_turn_millis > 1000 && left_distance > 1000 && front_distace < 1200) {
-  //   last_turn_millis = millis();
-  //   target_angle += 90;
-  // }
+    if((targetX*targetX + targetY*targetY) < 300*300) {
+      waypoint_index = (waypoint_index + 2) % 8;
+    }    
+  }  
+  // Serial.print("posX: ");
+  // Serial.print(posX);
+  // Serial.print(" posY: ");
+  // Serial.print(posY);
+  // Serial.print(" current dir: ");
+  // Serial.print(current_direction);
+  // Serial.print(" target angle: ");
+  // Serial.println(target_angle);
 
   if(updateGyro()) {
     servoAngle(computeServoSpeed() * 360.0f/2*PI + SERVO_MIDPOINT); // convert to degrees now

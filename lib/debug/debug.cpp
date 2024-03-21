@@ -9,18 +9,19 @@ typedef enum {
 	Servo
 } DebugHeader;
 
-HardwareSerial hs_debug(3);
+extern HardwareSerial hs_debug;
 
 void debug_init() {
-	hs_debug.begin(112500, SERIAL_8N1, 4, 2);
+	hs_debug.begin(112500, SERIAL_8N1, 23, 19);
 }
 
-void debug_msg(char *msg) {
+void debug_msg(const char *msg) {
 	uint8_t msg_len = (uint8_t)strlen(msg);
 
 	hs_debug.write(Message);
 	hs_debug.write(msg_len);
 	hs_debug.write(msg, msg_len);
+	hs_debug.flush();
 }
 
 void debug_target_direction(float angle) {
