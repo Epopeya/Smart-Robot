@@ -18,7 +18,6 @@
 #define LIDAR_INV_SMOOTHING (1 - LIDAR_SMOOTHING)
 
 // You need to create an driver instance
-HardwareSerial hs_debug(0);
 HardwareSerial hs(1);
 HardwareSerial lidar_serial(2);
 RPLidar lidar;
