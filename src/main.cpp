@@ -35,7 +35,7 @@ long gyro_dt;
 unsigned long gyro_last_time = 0;
 float gyro_offset;
 float posX = 0;
-float posY = 0; 
+float posY = 0;
 
 // lidar vars
 float left_distance = 0.0f;
@@ -57,19 +57,19 @@ void servoAngle(int angle) {
 
 void calibrateImu() {
   float totalAngle = 0;
-  for(int i = 0; i < MPU_CALIBRATION_ITERATIONS; i++) {
-    while(!mpu.update()) {}
+  for (int i = 0; i < MPU_CALIBRATION_ITERATIONS; i++) {
+    while (!mpu.update()) {}
     totalAngle += mpu.getGyroZ();
   }
   gyro_offset = totalAngle / MPU_CALIBRATION_ITERATIONS;
 }
 
 bool updateGyro() {
-  if(mpu.update()) {
+  if (mpu.update()) {
     long current_millis = millis();
     gyro_dt = current_millis - gyro_last_time;
     gyro_last_time = current_millis;
-    float gyro_value = (mpu.getGyroZ() - gyro_offset) *2*PI/360;
+    float gyro_value = (mpu.getGyroZ() - gyro_offset) * 2 * PI / 360;
     current_direction += gyro_value * gyro_dt / 1000;
     return true;
   }
@@ -81,7 +81,7 @@ float computeServoSpeed() {
   cum_error += error * gyro_dt;
   rate_error = (error - last_error) / gyro_dt;
 
-  float output = DIR_KP*error + DIR_KI*cum_error + DIR_KD*rate_error;
+  float output = DIR_KP * error + DIR_KI * cum_error + DIR_KD * rate_error;
 
   last_error = error;
 
@@ -89,14 +89,14 @@ float computeServoSpeed() {
 }
 
 // use absloute angle for this
-void liderTask(void * pvParameters) {
+void liderTask(void *pvParameters) {
   for (;;) {
     vTaskDelay(1);
-    
+
 
     if (IS_OK(lidar.waitPoint())) {
-      float distance = lidar.getCurrentPoint().distance; //distance value in mm unit
-      float angle    = lidar.getCurrentPoint().angle; //anglue value in degree
+      float distance = lidar.getCurrentPoint().distance;  //distance value in mm unit
+      float angle = lidar.getCurrentPoint().angle;        //anglue value in degree
 
       if (distance < 10.0 || distance > 3000.0) {
         continue;
@@ -107,7 +107,7 @@ void liderTask(void * pvParameters) {
 
       // front
       if (r_angle < 15 || r_angle > 345) {
-        front_distace =LIDAR_SMOOTHING * front_distace + LIDAR_INV_SMOOTHING * distance;
+        front_distace = LIDAR_SMOOTHING * front_distace + LIDAR_INV_SMOOTHING * distance;
       }
 
       // right
@@ -149,27 +149,25 @@ void setup() {
   lidar.startScan();
 
   xTaskCreatePinnedToCore(
-  liderTask,
-  "liderTask",
-  100000,
-  NULL,
-  10,
-  &lidar_task,
-  0);
+    liderTask,
+    "liderTask",
+    100000,
+    NULL,
+    10,
+    &lidar_task,
+    0);
 
   analogWrite(RPLIDAR_MOTOR, 255);
-
-      
 }
 
-int waypoints[8] = {2000, 2000, 
-                    -2000, 2000, 
-                    -2000, -2000, 
-                    2000, -2000};
+int waypoints[8] = { 2000, 2000,
+                     -2000, 2000,
+                     -2000, -2000,
+                     2000, -2000 };
 int waypoint_index = 0;
 
 void loop() {
-  if(hs.available() > 0) {
+  if (hs.available() > 0) {
     int encoders = hs.readStringUntil('\n').toInt() * MILIMETERS_PER_ENCODER;
 
     // current direction vector
@@ -186,17 +184,17 @@ void loop() {
     // shortest angle to target
     float angle_diff = atan2(targetY, targetX) - atan2(dirY, dirX);
     if (angle_diff > PI) {
-      angle_diff = angle_diff - 2*PI;
+      angle_diff = angle_diff - 2 * PI;
     } else if (angle_diff < -PI) {
-      angle_diff = angle_diff + 2*PI;
-    } 
+      angle_diff = angle_diff + 2 * PI;
+    }
 
     target_angle = angle_diff + current_direction;
 
-    if((targetX*targetX + targetY*targetY) < 300*300) {
+    if ((targetX * targetX + targetY * targetY) < 300 * 300) {
       waypoint_index = (waypoint_index + 2) % 8;
-    }    
-  }  
+    }
+  }
   // Serial.print("posX: ");
   // Serial.print(posX);
   // Serial.print(" posY: ");
@@ -206,7 +204,7 @@ void loop() {
   // Serial.print(" target angle: ");
   // Serial.println(target_angle);
 
-  if(updateGyro()) {
-    servoAngle(computeServoSpeed() * 360.0f/2*PI + SERVO_MIDPOINT); // convert to degrees now
+  if (updateGyro()) {
+    servoAngle(computeServoSpeed() * 360.0f / 2 * PI + SERVO_MIDPOINT);  // convert to degrees now
   }
 }
