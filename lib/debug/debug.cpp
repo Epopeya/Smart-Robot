@@ -1,14 +1,21 @@
 #include <Arduino.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-typedef enum { Message, TargetDirection, CurrentDirection, Servo } DebugHeader;
+typedef enum {
+  Message,
+  TargetDirection,
+  CurrentDirection,
+  Battery,
+  Servo
+} DebugHeader;
 
 HardwareSerial hs_debug(0);
 
-void debug_init() { hs_debug.begin(112500, SERIAL_8N1, 23, 19); }
+void debug_init() {
+  hs_debug.begin(112500, SERIAL_8N1, 23, 19);
+}
 
 void debug_msg(const char *format, ...) {
   char buffer[UINT8_MAX];
@@ -29,4 +36,9 @@ void debug_target_direction(float angle) {
 void debug_current_direction(float angle) {
   hs_debug.write(CurrentDirection);
   hs_debug.write((uint8_t *)&angle, sizeof(float));
+}
+
+void debug_battery(float voltage) {
+  hs_debug.write(Battery);
+  hs_debug.write((uint8_t *)&voltage, sizeof(float));
 }
