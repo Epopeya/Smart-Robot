@@ -77,6 +77,7 @@ void followAndSkipWaypoints(int index = waypoint_index) {
 }
 
 void setup() {
+  delay(200);
   //Debugging
   Serial.begin(9600);
   debug_init();
@@ -94,17 +95,54 @@ void setup() {
 
   waitForBattery();
   if (battery_voltage > 6) {
-    lidarSetup();
+    // lidarSetup();
     motorSpeed(10);
   }
+  motorSpeed(10);
+
+
+}
+
+// returns the error from the current axis
+float axisError(int turn, bool clockwise) {
+  float currentPos = position.x; // use y on horizontal, x on vertical
+  if (turn % 2 == 0) {
+    currentPos = position.y;
+  } 
+
+  float targetPos = 1000.0f;
+  // negative axis on first and last turn
+  if (turn == 0 || turn == 3) {
+    targetPos *= -1;
+  }
+
+  float error = targetPos - currentPos;
+  // change polarity
+  if (turn > 1) {
+    error *= -1;
+  }
+
+  // invert turns
+  if (clockwise) {
+    error *= -1;
+  }
+
+  error *= 0.005f;
+
+  return error;
+}
+
+void square() {
+  
 }
 
 int currentTurn = 0;
+bool clockwise = false;
 
 void loop() {
   Serial.println("main loop");
   // update direction
-  positionUpdate();
+  
   receiveFromSlave();
 
   if (millis() - last_battery_report > BATTERY_REPORT_RATE) {
@@ -116,6 +154,21 @@ void loop() {
   debug_current_direction(rotation);
   debug_target_direction(target_rotation);
 
+  float error = axisError(currentTurn, clockwise);
+  // debug_msg("err: %f", error);
+  positionUpdate(error);
+
+  // if (front_distance < TURNING_POINT && millis() - last_turn_millis > MIN_TURN_TIME) { // lidar check
+  //   if (left_distance > INNER_LENGTH) {
+  //     currentTurn++;
+  //     last_turn_millis = millis();
+  //   } else if (right_distance > INNER_LENGTH) {
+  //     currentTurn++;
+  //     last_turn_millis = millis();
+  //   }
+  // }
+
+  return;
   if (currentTurn < 4){ // first run code
     vector2_t next_waypoint = {
       .x = position.x + orientation.x * WAYPOINT_MIN_DISTANCE,
@@ -161,7 +214,7 @@ void loop() {
       relative_target_rot = 0;
     }
 
-    target_rotation = absolute_target_rot + relative_target_rot + middle_adjustment;
+    target_rotation = absolute_target_rot;// + relative_target_rot + middle_adjustment;
 
   } else { // waypoint follow code
       if (battery_voltage > 3) {
